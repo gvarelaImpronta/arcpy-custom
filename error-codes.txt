@@ -30,11 +30,5 @@ REM |       1        |                 1             |                 0        
 REM |       1        |                 1             |                 1             |            111       |
 REM +----------------+-------------------------------+-------------------------------+----------------------+
 
-TMAControlMFase2
-logs
-
-https://patapila.org/
-https://haciendocamino.org.ar/
-https://conin.org.ar/
 
 
