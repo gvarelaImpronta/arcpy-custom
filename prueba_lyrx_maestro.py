@@ -183,18 +183,43 @@ def main():
         log(f"[WARNING] createGroupLayer no disponible o fallo: {e}")
         log("[INFO] Fallback: se importaran los .lyrx al mapa y se agrupan luego")
 
-    # Reimportar cada .lyrx dentro del grupo contenedor
+    # Reimportar cada .lyrx dentro del grupo contenedor.
+    # Se prueban DOS metodos: si el A falla, se intenta el B automaticamente,
+    # para identificar en una sola corrida cual funciona en este entorno.
+    import traceback
     for ruta_lyrx, es_grupo, nombre in lyrx_generados:
+        lyr_file = arcpy.mp.LayerFile(ruta_lyrx)
+
+        # --- Metodo A: addLayerToGroup(grupo, layerfile) ---
+        ok = False
         try:
-            lyr_file = arcpy.mp.LayerFile(ruta_lyrx)
-            if grupo_contenedor is not None:
-                mapa_base.addLayerToGroup(grupo_contenedor, lyr_file, "BOTTOM")
-                log(f"[IMPORT] {nombre} -> dentro de grupo {nombre_grupo}")
-            else:
-                mapa_base.addLayer(lyr_file, "BOTTOM")
-                log(f"[IMPORT] {nombre} -> al mapa (sin grupo, fallback)")
+            resultado = mapa_base.addLayerToGroup(grupo_contenedor, lyr_file)
+            log(f"[IMPORT-A] {nombre} -> grupo {nombre_grupo} OK (retorno: {resultado})")
+            ok = True
         except Exception as e:
-            log(f"[ERROR import] {nombre}: {e}")
+            log(f"[IMPORT-A FALLO] {nombre}: repr={repr(e)}")
+            log(f"[TRACEBACK-A] {traceback.format_exc().strip().splitlines()[-1]}")
+
+        if ok:
+            continue
+
+        # --- Metodo B: addLayer al mapa + mover al grupo con addLayerToGroup ---
+        # Patron alternativo: primero se agrega el grupo al mapa (raiz),
+        # luego se mueve dentro del contenedor. Referencia: Esri Community.
+        try:
+            agregados = mapa_base.addLayer(lyr_file)   # devuelve lista de capas agregadas
+            log(f"[IMPORT-B] {nombre} agregado a raiz del mapa ({len(agregados)} elem)")
+            # Mover cada elemento agregado dentro del grupo contenedor
+            for capa_ag in agregados:
+                try:
+                    mapa_base.addLayerToGroup(grupo_contenedor, capa_ag)
+                    mapa_base.removeLayer(capa_ag)
+                    log(f"[IMPORT-B] {capa_ag.name} movido a grupo {nombre_grupo}")
+                except Exception as e2:
+                    log(f"[IMPORT-B mover FALLO] {capa_ag.name}: repr={repr(e2)}")
+        except Exception as e:
+            log(f"[IMPORT-B FALLO] {nombre}: repr={repr(e)}")
+            log(f"[TRACEBACK-B] {traceback.format_exc().strip().splitlines()[-1]}")
 
     # ------------------------------------------------------------------
     # PASO 8 - Guardar el APRX resultante
