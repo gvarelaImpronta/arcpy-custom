@@ -72,12 +72,20 @@ def log_estructura(mapa, titulo):
             except Exception as e:
                 simbologia = f"err:{e}"
             roto = ""
+            fuente = ""
             try:
-                if lyr.supports("DATASOURCE") and lyr.isBroken:
-                    roto = " [FUENTE ROTA]"
-            except Exception:
-                pass
-            log(f"{sangria}[CAPA]  {lyr.name}  | simbologia: {simbologia}{roto}")
+                if lyr.supports("DATASOURCE"):
+                    if lyr.isBroken:
+                        roto = " [FUENTE ROTA]"
+                        fuente = " -> (inaccesible)"
+                    else:
+                        try:
+                            fuente = f" -> {lyr.dataSource}"
+                        except Exception as e:
+                            fuente = f" -> (error dataSource: {e})"
+            except Exception as e:
+                roto = f" [error isBroken: {e}]"
+            log(f"{sangria}[CAPA]  {lyr.name}  | simbologia: {simbologia}{roto}{fuente}")
     log("=" * 70)
 
 
@@ -140,12 +148,20 @@ def main():
 
         destino = os.path.join(carpeta_lyrx, f"{lyr.name}.lyrx")
         try:
-            arcpy.management.SaveToLayerFile(lyr, destino, "ABSOLUTE")
+            # Metodo nativo arcpy.mp: preserva simbologia y, si es grupo,
+            # guarda todo el arbol de subcapas. Produce un .lyrx compatible
+            # con arcpy.mp.LayerFile (SaveToLayerFile GP no lo es).
+            lyr.saveACopy(destino)
             tipo = "GRUPO" if lyr.isGroupLayer else "CAPA"
-            log(f"[EXPORT lyrx] [{tipo}] {lyr.name} -> {destino}")
-            lyrx_generados.append((destino, lyr.isGroupLayer, lyr.name))
+            # Verificar que el archivo se creo y tiene contenido
+            if os.path.exists(destino) and os.path.getsize(destino) > 0:
+                tam = os.path.getsize(destino)
+                log(f"[EXPORT lyrx] [{tipo}] {lyr.name} -> {destino} ({tam} bytes)")
+                lyrx_generados.append((destino, lyr.isGroupLayer, lyr.name))
+            else:
+                log(f"[ERROR export] {lyr.name}: archivo no creado o vacio")
         except Exception as e:
-            log(f"[ERROR export] {lyr.name}: {e}")
+            log(f"[ERROR export] {lyr.name}: repr={repr(e)}")
 
     if not lyrx_generados:
         raise RuntimeError("No se exporto ningun .lyrx; se aborta la prueba.")
