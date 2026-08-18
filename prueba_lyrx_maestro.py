@@ -206,11 +206,13 @@ def main():
     for ruta_lyrx, es_grupo, nombre in lyrx_generados:
         lyr_file = arcpy.mp.LayerFile(ruta_lyrx)
 
-        # --- Metodo A: addLayerToGroup(grupo, layerfile) ---
+        # --- Metodo A: addLayerToGroup(grupo, layerfile, "BOTTOM") ---
+        # BOTTOM apila cada grupo debajo del anterior, preservando el orden
+        # en que se procesan (que replica el orden del APRX de origen).
         ok = False
         try:
-            resultado = mapa_base.addLayerToGroup(grupo_contenedor, lyr_file)
-            log(f"[IMPORT-A] {nombre} -> grupo {nombre_grupo} OK (retorno: {resultado})")
+            resultado = mapa_base.addLayerToGroup(grupo_contenedor, lyr_file, "BOTTOM")
+            log(f"[IMPORT-A] {nombre} -> grupo {nombre_grupo} OK (BOTTOM) (retorno: {resultado})")
             ok = True
         except Exception as e:
             log(f"[IMPORT-A FALLO] {nombre}: repr={repr(e)}")
