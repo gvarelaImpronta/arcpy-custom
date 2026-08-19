@@ -56,6 +56,7 @@ def main():
     log(f"           subtipo_error_tpk={subtipo}  (0=OK, 2=capa rota)")
     log(f"           capas_rotas={len(resumen['capas_rotas'])}")
     log(f"           grupos_creados={resumen['grupos_creados']}")
+    log(f"           reference_scale=1:{resumen.get('reference_scale')}")
     log("#" * 70)
 
     # Verificacion final: inspeccionar la estructura del maestro generado
@@ -65,6 +66,11 @@ def main():
     log("=" * 70)
     aprx = arcpy.mp.ArcGISProject(ruta_maestro)
     mapa = aprx.listMaps(NOMBRE_MAPA)[0]
+    # Reference scale del mapa maestro (debe coincidir con la del servicio, 1:1000)
+    try:
+        log(f"Reference scale del mapa maestro: 1:{mapa.referenceScale}")
+    except Exception as e:
+        log(f"Reference scale: (no disponible) {e}")
     for lyr in mapa.listLayers():
         nivel = lyr.longName.count("\\")
         sangria = "    " * nivel

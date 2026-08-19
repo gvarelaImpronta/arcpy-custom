@@ -150,6 +150,7 @@ def construir_lyrx_maestro(
     capas_rotas_total = []            # [(aprx, longName_capa)]
     capas_excluidas_total = []        # [(aprx, nombre_capa)]
     grupos_creados = 0
+    reference_scale_aplicada = None   # se hereda del primer APRX de servicio
 
     # ------------------------------------------------------------------
     # Loop por APRX de servicio (try/except por APRX: uno corrupto no aborta
@@ -172,6 +173,18 @@ def construir_lyrx_maestro(
             log(f"[ERROR APRX] No se pudo abrir/leer {nombre_aprx}: {repr(e)}")
             aprx_con_error_apertura.append(nombre_aprx)
             continue
+
+        # Heredar la reference scale del mapa de servicio al maestro (una vez,
+        # del primer APRX). Es propiedad del MAPA (no viaja en el .lyrx); sin
+        # ella los simbolos dependientes de escala no escalan en el maestro.
+        if reference_scale_aplicada is None:
+            try:
+                rs = mapa_serv.referenceScale
+                mapa_maestro.referenceScale = rs
+                reference_scale_aplicada = rs
+                log(f"[REFERENCE SCALE] Heredada del servicio: 1:{rs}")
+            except Exception as e:
+                log(f"[WARNING] No se pudo heredar reference scale: {repr(e)}")
 
         # Carpeta temp_lyrx propia de este APRX (evita colisiones de nombres)
         carpeta_lyrx = os.path.join(temp_lyrx, nombre_sin_ext)
@@ -252,6 +265,7 @@ def construir_lyrx_maestro(
     log(f"  Capas ROTAS detectadas : {len(capas_rotas_total)}")
     for aprx_o, capa in capas_rotas_total:
         log(f"      - {aprx_o} :: {capa}")
+    log(f"  Reference scale        : 1:{reference_scale_aplicada}")
     log(f"  Subtipo error TPK      : {subtipo} "
         f"({'OK' if subtipo == 0 else 'CAPA ROTA'})")
     log("=" * 70)
@@ -263,5 +277,6 @@ def construir_lyrx_maestro(
         "capas_rotas": capas_rotas_total,
         "capas_excluidas": capas_excluidas_total,
         "hubo_capa_rota": hubo_capa_rota,
+        "reference_scale": reference_scale_aplicada,
     }
     return aprx_maestro_salida, subtipo, resumen
