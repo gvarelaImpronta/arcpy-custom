@@ -280,3 +280,55 @@ def construir_lyrx_maestro(
         "reference_scale": reference_scale_aplicada,
     }
     return aprx_maestro_salida, subtipo, resumen
+
+
+def preparar_aprx_region(
+    aprx_maestro,             # ruta del APRX maestro ya construido
+    salida_dir,               # carpeta de salida
+    region,                   # nombre de la subregion
+    tpk_path_VRED_BASEMAP,    # ruta al .tpk VRED de la subregion
+    nombre_mapa,              # "Mapa"
+    log,                      # funcion de logging
+):
+    """Arma el APRX de una subregion partiendo del maestro: copia el maestro
+    como APRX_{region}, agrega el TPK VRED como capa suelta al fondo (es
+    basemap, no consultable) y guarda. Devuelve la ruta del APRX de region.
+
+    Reemplaza el armado anterior que abria APRX_APP_OFFLINE.aprx. Ya no busca
+    la capa TRANSFORMADOR ni hace moveLayer relativo a ella: el VRED va al
+    fondo del TOC. La reference scale se hereda al copiar el maestro.
+    """
+    ruta_region = os.path.join(salida_dir, f"APRX_{region}.aprx")
+    if os.path.exists(ruta_region):
+        os.remove(ruta_region)
+    shutil.copyfile(aprx_maestro, ruta_region)
+
+    aprx_region = arcpy.mp.ArcGISProject(ruta_region)
+    mapa_region = aprx_region.listMaps(nombre_mapa)[0]
+
+    # Agregar el TPK VRED (basemap). addDataFromPath puede ubicarlo arriba;
+    # se identifica la capa nueva y se mueve al fondo del TOC.
+    capas_antes = list(mapa_region.listLayers())
+    mapa_region.addDataFromPath(os.path.abspath(tpk_path_VRED_BASEMAP))
+
+    nuevas = [l for l in mapa_region.listLayers() if l not in capas_antes]
+    if not nuevas:
+        log(f"[WARNING] No se detecto la capa del TPK VRED agregada en {region}")
+    else:
+        tpk_layer = nuevas[0]
+        # Elementos de primer nivel (para mover el TPK debajo del ultimo)
+        nivel_raiz = [l for l in mapa_region.listLayers() if _es_primer_nivel(l)]
+        otros_raiz = [l for l in nivel_raiz if l is not tpk_layer]
+        if otros_raiz:
+            try:
+                mapa_region.moveLayer(otros_raiz[-1], tpk_layer, "AFTER")
+                log(f"[TPK VRED] Movido al fondo del TOC en {region}")
+            except Exception as e:
+                log(f"[WARNING] No se pudo mover el TPK VRED al fondo en {region}: {repr(e)}")
+        else:
+            log(f"[TPK VRED] Unico elemento; queda como esta en {region}")
+
+    aprx_region.save()
+    log(f"[APRX] Generado APRX_{region}.aprx")
+    return ruta_region
+

@@ -12,7 +12,7 @@ Correr desde consola (mismo directorio que construir_lyrx_maestro.py):
 
 import os
 import datetime
-from construir_lyrx_maestro import construir_lyrx_maestro
+from construir_lyrx_maestro import construir_lyrx_maestro, preparar_aprx_region
 
 # ======================================================================
 # CONFIGURACION (ajustar al ambiente)
@@ -28,6 +28,10 @@ APRX_MAESTRO   = SALIDA + r"\APRX_MAESTRO.aprx"
 # Exclusiones por nombre de capa (vacio = no excluye). Ejemplo para probar:
 # CAPAS_EXCLUIDAS_APPOFFLINE = {"FOAM", "TERMINALES"}
 CAPAS_EXCLUIDAS_APPOFFLINE = set()
+
+# Para probar preparar_aprx_region: TPK VRED existente y nombre de region.
+TPK_VRED_PRUEBA = SALIDA + r"\TPK_11 CAPITAL NORTE_VRED.tpk"
+REGION_PRUEBA   = "11 CAPITAL NORTE"
 # ======================================================================
 
 
@@ -85,6 +89,52 @@ def main():
                 pass
             log(f"{sangria}[CAPA] {lyr.name}{roto}")
     log("=" * 70)
+
+    # ------------------------------------------------------------------
+    # Prueba de preparar_aprx_region (maestro + TPK VRED al fondo)
+    # ------------------------------------------------------------------
+    log("#" * 70)
+    log("PRUEBA - preparar_aprx_region")
+    log("#" * 70)
+    if not os.path.exists(TPK_VRED_PRUEBA):
+        log(f"[SALTEADO] No existe el TPK VRED de prueba: {TPK_VRED_PRUEBA}")
+    else:
+        ruta_region = preparar_aprx_region(
+            aprx_maestro=ruta_maestro,
+            salida_dir=SALIDA,
+            region=REGION_PRUEBA,
+            tpk_path_VRED_BASEMAP=TPK_VRED_PRUEBA,
+            nombre_mapa=NOMBRE_MAPA,
+            log=log,
+        )
+        log(f"[RESULTADO] APRX region generado: {ruta_region}")
+
+        # Inspeccionar la estructura del APRX de region
+        log("=" * 70)
+        log(f"ESTRUCTURA DEL APRX_{REGION_PRUEBA} (maestro + TPK VRED)")
+        log("=" * 70)
+        aprx_r = arcpy.mp.ArcGISProject(ruta_region)
+        mapa_r = aprx_r.listMaps(NOMBRE_MAPA)[0]
+        try:
+            log(f"Reference scale del APRX region: 1:{mapa_r.referenceScale}")
+        except Exception as e:
+            log(f"Reference scale: (no disponible) {e}")
+        for lyr in mapa_r.listLayers():
+            nivel = lyr.longName.count("\\")
+            sangria = "    " * nivel
+            if lyr.isGroupLayer:
+                log(f"{sangria}[GRUPO] {lyr.name}")
+            else:
+                roto = ""
+                try:
+                    if lyr.supports("DATASOURCE") and lyr.isBroken:
+                        roto = " [ROTA]"
+                except Exception:
+                    pass
+                log(f"{sangria}[CAPA] {lyr.name}{roto}")
+        log("=" * 70)
+        log(">> Verificar: el TPK VRED (mapa base) debe aparecer AL FONDO del TOC,")
+        log(">> los grupos de servicio arriba, y la reference scale conservada (1:1000).")
 
 
 if __name__ == "__main__":
