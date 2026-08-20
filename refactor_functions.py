@@ -205,13 +205,10 @@ def construir_lyrx_maestro(
             continue
 
         # Procesar cada elemento de primer nivel
+        # (La exclusion de capas NO se hace aca: se aplica sobre el maestro ya
+        #  armado, recorriendo todos los niveles, para poder excluir tambien
+        #  capas anidadas dentro de grupos. Ver bloque post-armado mas abajo.)
         for elem in elementos:
-            # --- Exclusion por nombre (SE LOGEA) ---
-            if elem.name in capas_excluidas:
-                log(f"[EXCLUIDA] {elem.name} del APRX {nombre_aprx}")
-                capas_excluidas_total.append((nombre_aprx, elem.name))
-                continue
-
             # --- Deteccion proactiva de capas rotas (SE LOGEA) ---
             rotas = _capas_rotas_bajo(elem, mapa_serv)
             if rotas:
@@ -241,10 +238,40 @@ def construir_lyrx_maestro(
                 log(f"[ERROR] Fallo la importacion de {elem.name} al maestro: {repr(e)}")
                 continue
 
+    # --- Exclusion de capas en CUALQUIER nivel (sobre el maestro armado) -----
+    # Se recorre el maestro completo (listLayers aplana todos los niveles) y se
+    # remueven las capas cuyo nombre esta en capas_excluidas. Se hace UNA vez
+    # sobre el maestro; todas las regiones lo heredan al copiarse (mismo nivel
+    # de datos en todas). Cubre capas sueltas y capas anidadas dentro de grupos.
+    if capas_excluidas:
+        for lyr in list(mapa_maestro.listLayers()):
+            if lyr.isGroupLayer:
+                continue  # solo se excluyen capas de datos, no grupos contenedores
+            if lyr.name in capas_excluidas:
+                try:
+                    mapa_maestro.removeLayer(lyr)
+                    log(f"[EXCLUIDA] {lyr.longName}")
+                    capas_excluidas_total.append(lyr.longName)
+                except Exception as e:
+                    log(f"[ERROR] No se pudo excluir {lyr.longName}: {repr(e)}")
+
     # --- Guardar el maestro --------------------------------------------------
     aprx_maestro.save()
     log(f"[APRX] Maestro generado: {os.path.basename(aprx_maestro_salida)}")   # SE LOGEA
 
+    # Recalcular el estado de capa rota SOBRE EL MAESTRO FINAL (post-exclusion):
+    # una capa excluida no debe contar como rota. Se reevalua isBroken sobre las
+    # capas que efectivamente quedaron en el maestro.
+    capas_rotas_final = []
+    for lyr in mapa_maestro.listLayers():
+        if lyr.isGroupLayer:
+            continue
+        try:
+            if lyr.supports("DATASOURCE") and lyr.isBroken:
+                capas_rotas_final.append(lyr.longName)
+        except Exception:
+            capas_rotas_final.append(lyr.longName + " (isBroken indeterminado)")
+    hubo_capa_rota = len(capas_rotas_final) > 0
     subtipo = TPK_CAPA_ROTA if hubo_capa_rota else TPK_OK
 
     # --- Resumen final (SE LOGEA) -------------------------------------------
@@ -254,9 +281,9 @@ def construir_lyrx_maestro(
     log(f"  Grupos creados         : {grupos_creados}")
     log(f"  APRX con error apertura: {len(aprx_con_error_apertura)} {aprx_con_error_apertura or ''}")
     log(f"  Capas excluidas        : {len(capas_excluidas_total)}")
-    log(f"  Capas ROTAS detectadas : {len(capas_rotas_total)}")
-    for aprx_o, capa in capas_rotas_total:
-        log(f"      - {aprx_o} :: {capa}")
+    log(f"  Capas ROTAS (en maestro): {len(capas_rotas_final)}")
+    for capa in capas_rotas_final:
+        log(f"      - {capa}")
     log(f"  Reference scale        : 1:{reference_scale_aplicada}")
     log(f"  Subtipo error TPK      : {subtipo} ({'OK' if subtipo == 0 else 'CAPA ROTA'})")
     log("=" * 70)
@@ -265,7 +292,7 @@ def construir_lyrx_maestro(
         "aprx_procesados": len(aprx_servicios),
         "grupos_creados": grupos_creados,
         "aprx_error_apertura": aprx_con_error_apertura,
-        "capas_rotas": capas_rotas_total,
+        "capas_rotas": capas_rotas_final,
         "capas_excluidas": capas_excluidas_total,
         "hubo_capa_rota": hubo_capa_rota,
         "reference_scale": reference_scale_aplicada,
@@ -386,6 +413,14 @@ def preparar_aprx_region(
 #     (generacion del TPK VRED, guardado) se conserva.
 #   - Si la generacion del TPK VRED de una subregion falla (no se guarda el
 #     .tpk), marcar el tipo de error TPK_ERR_GEN (1) en el acumulador (ver 2.6).
+#   - EXCLUSION DE CAPAS: NO va en el loop. La exclusion de capas
+#     (CAPAS_EXCLUIDAS_APPOFFLINE) se hace UNA sola vez dentro de
+#     construir_lyrx_maestro, recorriendo el maestro en TODOS los niveles y
+#     removiendo las capas por nombre antes de guardar el maestro. Como cada
+#     APRX_{region} se copia del maestro, todas las regiones heredan el mismo
+#     nivel de datos. => ELIMINAR del loop cualquier bloque que recorra
+#     map_offline.listLayers() y haga removeLayer por CAPAS_EXCLUIDAS_APPOFFLINE
+#     (no tendria efecto: opera sobre otro mapa y despues del save interno).
 #
 # ── 2.6  CODIGO DE SALIDA (al final, tras el loop) ─────────────────────────
 #   Semantica uniforme por digito (0 / 1..8 / 9). La centena (TPK) se compone
